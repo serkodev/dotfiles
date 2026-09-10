@@ -19,43 +19,43 @@ kp() {
     return 1
   fi
 
-  # Find PID
-  local pids=(${(f)"$(lsof -ti :"$port")"})
+  # Match listening servers; connected clients can also reference this port.
+  local pids=(${(f)"$(lsof -nP -t -a -iTCP:"$port" -sTCP:LISTEN)"})
 
   if (( ${#pids[@]} == 0 )); then
     echo "No process found on port $port"
     return 0
   fi
 
+  local pid
   for pid in $pids; do
-    # Get process name and executable path
     local process=$(ps -p "$pid" -o comm=)
-    local path=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+    local proc_cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
 
     echo "Port:    $port"
     echo "PID:     $pid"
     echo "Process: $process"
-    echo "Path:    ${path:-unknown}"
+    echo "Path:    ${proc_cwd:-unknown}"
 
     # kp! → force kill immediately
     if $force; then
       kill -9 "$pid" || continue
-      echo "✓ Force killed $process ($pid) — ${path:-unknown}"
+      echo "✓ Force killed $process ($pid) — ${proc_cwd:-unknown}"
       continue
     fi
 
     # kp → ask before killing
     local answer
-    read "answer=Kill this process? [N/y/f] "
+    read -r "answer?Kill this process? [N/y/f] " || return 1
 
     case "${answer:l}" in
       y)
         kill "$pid" || continue
-        echo "✓ Killed $process ($pid) — ${path:-unknown}"
+        echo "✓ Killed $process ($pid) — ${proc_cwd:-unknown}"
         ;;
       f)
         kill -9 "$pid" || continue
-        echo "✓ Force killed $process ($pid) — ${path:-unknown}"
+        echo "✓ Force killed $process ($pid) — ${proc_cwd:-unknown}"
         ;;
       *)
         echo "Cancelled."
